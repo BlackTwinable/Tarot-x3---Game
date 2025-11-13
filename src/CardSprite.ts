@@ -1,6 +1,9 @@
 import { BlurFilter, Graphics, Texture } from 'pixi.js';
-import { Container3d, Sprite3d } from 'pixi-projection';
+import { Container3d, Sprite3d, Text3d } from 'pixi-projection';
 import { Group } from '@pixi/layers';
+import { TextStyle } from 'pixi.js';
+import gsap from 'gsap';
+import { getRandomMultiplier, getMultiplierColor, formatMultiplier } from './multipliers';
 
 export const shadowGroup = new Group(1);
 export const cardsGroup = new Group(2, (item) => {
@@ -12,6 +15,7 @@ export const cardsGroup = new Group(2, (item) => {
     parent.checkFace();
   }
 });
+export const multipliersGroup = new Group(3);
 
 const blurFilter = new BlurFilter();
 blurFilter.blur = 0.2;
@@ -21,8 +25,29 @@ export class CardSprite extends Container3d {
   protected inner: Container3d;
   protected back: Sprite3d;
   protected face: Container3d;
-  public code: number;
+  protected multiplierText: Text3d;
+  private _code: number;
   public showCode: number;
+  public multiplier: number;
+  private flipTimeline?: gsap.core.Timeline;
+  public isMultiplierSet: boolean = false;
+
+  get code(): number {
+    return this._code;
+  }
+
+  set code(value: number) {
+    if (this._code === value) return;
+    this._code = value;
+
+    if (value > 0 && !this.isMultiplierSet) {
+      this.multiplier = getRandomMultiplier();
+      this.updateMultiplierText();
+      this.isMultiplierSet = true;
+    }
+
+    this.animateFlip();
+  }
 
   constructor(private cardsTextures: Record<string, Texture>) {
     super();
@@ -55,10 +80,36 @@ export class CardSprite extends Container3d {
     this.face = new Container3d();
     this.inner.addChild(this.back);
     this.inner.addChild(this.face);
-    this.code = 0;
+    this._code = 0;
     this.showCode = -1;
+    this.multiplier = 0;
     this.inner.euler.y = Math.PI;
     this.scale3d.set(0.2);
+
+    this.back.renderable = true;
+    this.face.renderable = false;
+
+    // Create multiplier text
+    const textStyle = new TextStyle({
+      fontSize: 120,
+      fontFamily: 'Arial',
+      fontWeight: 'bold',
+      fill: '#FFFFFF',
+      stroke: '#000000',
+      strokeThickness: 8,
+      dropShadow: true,
+      dropShadowColor: '#000000',
+      dropShadowDistance: 4,
+      dropShadowAngle: Math.PI / 4,
+      dropShadowBlur: 4,
+    });
+
+    this.multiplierText = new Text3d('', textStyle);
+    this.multiplierText.anchor.set(0.5);
+    this.multiplierText.position3d.x = 0;
+    this.multiplierText.position3d.y = 0;
+    this.multiplierText.position3d.z = 50;
+    this.multiplierText.parentGroup = multipliersGroup;
 
     // construct "face" from four sprites
     this.createFace();
@@ -66,7 +117,11 @@ export class CardSprite extends Container3d {
 
   createFace() {
     const { face } = this;
-    face.removeChildren();
+
+    if (face.children.length > 0) {
+      face.removeChildren();
+    }
+
     const sprite = new Sprite3d(this.cardsTextures['../public/assets/card_front.png']);
     const sprite2 = new Sprite3d(Texture.EMPTY);
     const sprite3 = new Sprite3d(Texture.EMPTY);
@@ -85,27 +140,55 @@ export class CardSprite extends Container3d {
     face.addChild(sprite2);
     face.addChild(sprite3);
     face.addChild(sprite4);
+
+    face.addChild(this.multiplierText);
   }
 
   updateFace() {
     const { face } = this;
+
     (face.children[1] as Sprite3d).texture = Texture.EMPTY;
     (face.children[2] as Sprite3d).texture = Texture.EMPTY;
     (face.children[3] as Sprite3d).texture = Texture.EMPTY;
   }
 
+  updateMultiplierText() {
+    this.multiplierText.text = formatMultiplier(this.multiplier);
+    const color = getMultiplierColor(this.multiplier);
+    (this.multiplierText.style as TextStyle).fill = color;
+    // Make sure it's visible when card is face up
+    this.multiplierText.visible = true;
+  }
+
+  animateFlip() {
+    if (this.flipTimeline) {
+      this.flipTimeline.kill();
+    }
+
+    const { inner } = this;
+
+    const targetAngle = this._code > 0 ? 0 : Math.PI;
+
+    this.flipTimeline = gsap.timeline();
+
+    this.flipTimeline.to(inner.euler, {
+      y: targetAngle,
+      duration: 0.6,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        inner.position3d.z = -Math.sin(inner.euler.y) * this.back.width;
+
+        this.shadow.euler.y = inner.euler.y;
+
+        this.checkFace();
+      },
+    });
+  }
+
   update(dt: number) {
     const { inner } = this;
-    if (this.code > 0 && inner.euler.y > 0) {
-      inner.euler.y = Math.max(0, inner.euler.y - dt * 5);
-    }
-    if (this.code === 0 && inner.euler.y < Math.PI) {
-      inner.euler.y = Math.min(Math.PI, inner.euler.y + dt * 5);
-    }
     inner.position3d.z = -Math.sin(inner.euler.y) * this.back.width;
-
-    // assignment is overriden, so its actually calling euler.copyFrom(this.euler)
-    this.shadow.euler = inner.euler;
+    this.shadow.euler.y = inner.euler.y;
   }
 
   checkFace() {
@@ -117,14 +200,16 @@ export class CardSprite extends Container3d {
       cc = 0;
     } else {
       // user sees the face
-      cc = this.showCode || this.code;
+      cc = this.showCode || this._code;
     }
     if (cc === 0) {
       this.back.renderable = true;
       this.face.renderable = false;
+      this.multiplierText.visible = false;
     } else {
       this.back.renderable = false;
       this.face.renderable = true;
+      this.multiplierText.visible = true;
     }
 
     if (cc !== this.showCode) {

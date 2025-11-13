@@ -1,9 +1,11 @@
 import { Application, TextStyle } from 'pixi.js';
 import { Camera3d, Container3d, Text3d } from 'pixi-projection';
-import { CardSprite } from './CardSprite';
+import { Layer } from '@pixi/layers';
+import { CardSprite, shadowGroup, cardsGroup, multipliersGroup } from './CardSprite';
 import { TableSprite } from './TableSprite';
-import { dealHand } from './dealHand';
+import { dealHandAnimated } from './dealHand';
 import { loadCardAssets, loadTableAsset } from './loadAssets';
+import { BetUI } from './BetUI';
 
 (async () => {
   const app = new Application({ background: '#000', resizeTo: window });
@@ -16,6 +18,11 @@ import { loadCardAssets, loadTableAsset } from './loadAssets';
 
   //LOADING THE ASSETS
   const cardsTextures = await loadCardAssets();
+
+  // Setup layer manager for proper render order
+  app.stage.addChild(new Layer(shadowGroup));
+  app.stage.addChild(new Layer(cardsGroup));
+  app.stage.addChild(new Layer(multipliersGroup));
 
   //ADDING THE CAMERA TO THE STAGE TO HAVEV A PERSPECTIVE VIEW
   const camera = new Camera3d();
@@ -37,7 +44,20 @@ import { loadCardAssets, loadTableAsset } from './loadAssets';
   cards.scale3d.set(2);
   camera.addChild(cards);
 
+  // Create BetUI
+  const betUI = new BetUI();
+  betUI.x = app.screen.width / 2;
+  betUI.y = app.screen.height - 100;
+  app.stage.addChild(betUI);
+
+  // Game state
+  let isGameActive = false;
+
   function onClick(event: any) {
+    if (!isGameActive) {
+      return;
+    }
+
     const { target } = event;
     if (target.code === 0) {
       const num = ((Math.random() * 13) | 0) + 2;
@@ -64,12 +84,24 @@ import { loadCardAssets, loadTableAsset } from './loadAssets';
     camera.addChild(basicText);
   }
 
-  async function onAssetsLoaded() {
-    dealHand(cards, cardsTextures, onClick);
+  async function startGame() {
+    // Deactivate bet UI and show at top
+    betUI.deactivate();
+    betUI.positionBetOnTop(0, -app.screen.height + 200);
+
+    await dealHandAnimated(cards, cardsTextures, onClick, 0.3);
+
     addText('Tap on cards');
 
-    // start animating
-    app.start();
+    isGameActive = true;
+  }
+
+  const playButton = document.getElementById('play-button') as HTMLButtonElement;
+  if (playButton) {
+    playButton.addEventListener('click', () => {
+      playButton.classList.add('hidden');
+      startGame();
+    });
   }
 
   app.ticker.add((deltaTime) => {
@@ -88,5 +120,5 @@ import { loadCardAssets, loadTableAsset } from './loadAssets';
     }
   });
 
-  onAssetsLoaded();
+  app.start();
 })();
