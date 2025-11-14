@@ -1,11 +1,12 @@
 import { Application, TextStyle } from 'pixi.js';
 import { Camera3d, Container3d, Text3d } from 'pixi-projection';
-import { Layer } from '@pixi/layers';
-import { CardSprite, shadowGroup, cardsGroup, multipliersGroup } from './CardSprite';
+import { CardSprite } from './CardSprite';
 import { TableSprite } from './TableSprite';
 import { dealHandAnimated } from './dealHand';
 import { loadCardAssets, loadTableAsset } from './loadAssets';
 import { BetUI } from './BetUI';
+import { WinMessagePopup } from './WinMessagePopup';
+import { loadMultiplierTable } from './multipliers';
 
 (async () => {
   const app = new Application({ background: '#000', resizeTo: window });
@@ -18,11 +19,7 @@ import { BetUI } from './BetUI';
 
   //LOADING THE ASSETS
   const cardsTextures = await loadCardAssets();
-
-  // Setup layer manager for proper render order
-  app.stage.addChild(new Layer(shadowGroup));
-  app.stage.addChild(new Layer(cardsGroup));
-  app.stage.addChild(new Layer(multipliersGroup));
+  await loadMultiplierTable();
 
   //ADDING THE CAMERA TO THE STAGE TO HAVEV A PERSPECTIVE VIEW
   const camera = new Camera3d();
@@ -44,14 +41,45 @@ import { BetUI } from './BetUI';
   cards.scale3d.set(2);
   camera.addChild(cards);
 
-  // Create BetUI
+  // BET UI
   const betUI = new BetUI();
   betUI.x = app.screen.width / 2;
   betUI.y = app.screen.height - 100;
   app.stage.addChild(betUI);
 
+  // WIN MESSAGE
+  const winPopup = new WinMessagePopup(() => {
+    // Reset callback
+    location.reload();
+  });
+  winPopup.x = app.screen.width / 2;
+  winPopup.y = app.screen.height / 2;
+  app.stage.addChild(winPopup);
+
   // Game state
   let isGameActive = false;
+
+  function checkWinCondition() {
+    let allFaceUp = true;
+    let totalMultiplier = 0;
+
+    for (let i = 0; i < cards.children.length; i++) {
+      const card = cards.children[i] as CardSprite;
+      if (card.code === 0) {
+        allFaceUp = false;
+        break;
+      }
+      totalMultiplier += card.multiplier;
+    }
+
+    if (allFaceUp && cards.children.length > 0) {
+      const currentBet = betUI.getCurrentBet();
+      setTimeout(() => {
+        winPopup.show(currentBet, totalMultiplier);
+      }, 1000);
+      isGameActive = false;
+    }
+  }
 
   function onClick(event: any) {
     if (!isGameActive) {
@@ -63,8 +91,11 @@ import { BetUI } from './BetUI';
       const num = ((Math.random() * 13) | 0) + 2;
       const suit = ((Math.random() * 4) | 0) + 1;
       target.code = suit * 16 + num;
+
+      checkWinCondition();
     } else {
       target.code = 0;
+      winPopup.hide();
     }
   }
 
@@ -85,7 +116,6 @@ import { BetUI } from './BetUI';
   }
 
   async function startGame() {
-    // Deactivate bet UI and show at top
     betUI.deactivate();
     betUI.positionBetOnTop(0, -app.screen.height + 200);
 

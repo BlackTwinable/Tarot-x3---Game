@@ -55,7 +55,6 @@ export async function dealHandAnimated(
     );
   }
 
-  // Wait for timeline to complete
   await new Promise<void>((resolve) => {
     masterTimeline.eventCallback('onComplete', () => resolve());
   });

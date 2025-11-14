@@ -59,9 +59,7 @@ export class CardSprite extends Container3d {
     shadowGraphic.endFill();
     shadowGraphic.alpha = 0.6;
 
-    // Convert graphics to texture using renderer
     const shadowTexture = (globalThis as any).__PIXI_APP__.renderer.generateTexture(shadowGraphic);
-    // shadow will be under card
     this.shadow = new Sprite3d(shadowTexture);
     this.shadow.anchor.set(0.5);
     this.shadow.scale3d.set(0.98);
@@ -74,7 +72,6 @@ export class CardSprite extends Container3d {
     this.addChild(this.shadow);
     this.addChild(this.inner);
 
-    // construct "inner" from back and face
     this.back = new Sprite3d(cardsTextures['../public/assets/card_back.png']);
     this.back.anchor.set(0.5);
     this.face = new Container3d();
@@ -89,7 +86,6 @@ export class CardSprite extends Container3d {
     this.back.renderable = true;
     this.face.renderable = false;
 
-    // Create multiplier text
     const textStyle = new TextStyle({
       fontSize: 120,
       fontFamily: 'Arial',
@@ -111,7 +107,6 @@ export class CardSprite extends Container3d {
     this.multiplierText.position3d.z = 50;
     this.multiplierText.parentGroup = multipliersGroup;
 
-    // construct "face" from four sprites
     this.createFace();
   }
 
@@ -156,7 +151,7 @@ export class CardSprite extends Container3d {
     this.multiplierText.text = formatMultiplier(this.multiplier);
     const color = getMultiplierColor(this.multiplier);
     (this.multiplierText.style as TextStyle).fill = color;
-    // Make sure it's visible when card is face up
+
     this.multiplierText.visible = true;
   }
 
